@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion"; // Animation for messages
-import { Send, Paperclip, Sparkles, Sprout, CloudRain, IndianRupee } from "lucide-react";
+import { Send, Paperclip, Sparkles, Sprout, CloudRain, IndianRupee, X, Image, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -8,11 +8,18 @@ import { MessageBubble } from "./MessageBubble";
 import { AgrishieldLogo } from "@/components/ui/AgrishieldLogo"; // Keeping your custom logo
 import clsx from "clsx";
 
+interface AttachedFile {
+  file: File;
+  preview?: string;
+  type: 'image' | 'document';
+}
+
 interface Message {
   id: string;
   text: string;
   isBot: boolean;
   timestamp: Date;
+  attachments?: AttachedFile[];
 }
 
 // Quick prompts to help farmers start the conversation
@@ -36,7 +43,9 @@ export function ChatWindow({ location }: { location: any }) {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [language, setLanguage] = useState("English");
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -46,26 +55,76 @@ export function ChatWindow({ location }: { location: any }) {
     scrollToBottom();
   }, [messages, isTyping]);
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newAttachments: AttachedFile[] = [];
+    
+    Array.from(files).forEach((file) => {
+      const isImage = file.type.startsWith('image/');
+      const attachment: AttachedFile = {
+        file,
+        type: isImage ? 'image' : 'document',
+      };
+
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          attachment.preview = event.target?.result as string;
+          setAttachedFiles(prev => [...prev]);
+        };
+        reader.readAsDataURL(file);
+      }
+
+      newAttachments.push(attachment);
+    });
+
+    setAttachedFiles(prev => [...prev, ...newAttachments]);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleSendMessage = async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() && attachedFiles.length === 0) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       text: text.trim(),
       isBot: false,
       timestamp: new Date(),
+      attachments: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue("");
+    setAttachedFiles([]);
     setIsTyping(true);
+
+    // Build message text including file info for AI context
+    let messageText = text.trim();
+    if (attachedFiles.length > 0) {
+      const fileNames = attachedFiles.map(a => a.file.name).join(', ');
+      messageText += messageText ? `\n[Attached files: ${fileNames}]` : `[Attached files: ${fileNames}]`;
+    }
 
     try {
       const apiResponse = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
+          message: messageText,
           language: language,
           location: location, // Passing the location data
           date: new Date().toISOString(),
@@ -160,6 +219,59 @@ export function ChatWindow({ location }: { location: any }) {
 
       {/* Input Area - Floating Capsule Design */}
       <div className="p-4 pt-2">
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          multiple
+          accept="image/*,.pdf,.doc,.docx,.txt"
+          className="hidden"
+        />
+
+        {/* Attached Files Preview */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachedFiles.map((attachment, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative group"
+              >
+                {attachment.type === 'image' && attachment.preview ? (
+                  <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-white/20">
+                    <img
+                      src={attachment.preview}
+                      alt={attachment.file.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-2">
+                    <FileText className="w-4 h-4 text-green-400" />
+                    <span className="text-xs text-white/80 max-w-[100px] truncate">
+                      {attachment.file.name}
+                    </span>
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="text-white/60 hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+
         <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-2 flex items-center gap-2 shadow-2xl relative">
           
           {/* Language Selector (Integrated into input bar) */}
@@ -197,16 +309,26 @@ export function ChatWindow({ location }: { location: any }) {
           </div>
 
           <div className="flex items-center gap-1 pr-2">
-             <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10 rounded-full">
+             <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleAttachClick}
+                className={clsx(
+                  "h-8 w-8 rounded-full transition-all",
+                  attachedFiles.length > 0 
+                    ? "text-green-400 hover:text-green-300 hover:bg-green-500/20" 
+                    : "text-white/60 hover:text-white hover:bg-white/10"
+                )}
+              >
                 <Paperclip className="h-4 w-4" />
               </Button>
               <Button 
                 onClick={() => handleSendMessage(inputValue)}
-                disabled={!inputValue.trim() || isTyping}
+                disabled={(!inputValue.trim() && attachedFiles.length === 0) || isTyping}
                 size="icon"
                 className={clsx(
                     "h-10 w-10 rounded-full transition-all duration-300",
-                    inputValue.trim() ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/10 text-white/40"
+                    (inputValue.trim() || attachedFiles.length > 0) ? "bg-green-500 hover:bg-green-600 text-white" : "bg-white/10 text-white/40"
                 )}
               >
                 {isTyping ? <Sparkles className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 ml-0.5" />}

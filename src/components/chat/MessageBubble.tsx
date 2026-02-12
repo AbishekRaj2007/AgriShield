@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AgrishieldLogo } from "@/components/ui/AgrishieldLogo";
-import { Copy, Check, Volume2, StopCircle, User } from "lucide-react";
+import { Copy, Check, Volume2, StopCircle, User, FileText, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import clsx from "clsx";
+
+interface AttachedFile {
+  file: File;
+  preview?: string;
+  type: 'image' | 'document';
+}
 
 interface Message {
   id: string;
   text: string;
   isBot: boolean;
   timestamp: Date;
+  attachments?: AttachedFile[];
 }
 
 // Helper to format time
@@ -33,7 +40,7 @@ const renderFormattedText = (text: string) => {
 };
 
 export function MessageBubble({ message }: { readonly message: Message }) {
-  const { text, isBot, timestamp } = message;
+  const { text, isBot, timestamp, attachments } = message;
   const [isCopied, setIsCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -113,9 +120,36 @@ export function MessageBubble({ message }: { readonly message: Message }) {
     <div className="flex items-start gap-3 justify-end group">
       <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%]">
         <div className="rounded-2xl rounded-tr-none bg-gradient-to-br from-green-600 to-emerald-700 text-white p-4 shadow-lg shadow-green-900/20 border border-green-500/20">
-          <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap font-medium">
-            {text}
-          </p>
+          {/* Render Attachments */}
+          {attachments && attachments.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {attachments.map((attachment, index) => (
+                <div key={index}>
+                  {attachment.type === 'image' && attachment.preview ? (
+                    <div className="relative w-32 h-32 rounded-lg overflow-hidden border border-white/20">
+                      <img
+                        src={attachment.preview}
+                        alt={attachment.file.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-lg px-3 py-2">
+                      <FileText className="w-4 h-4 text-white/80" />
+                      <span className="text-xs text-white/90 max-w-[120px] truncate">
+                        {attachment.file.name}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {text && (
+            <p className="text-sm md:text-base leading-relaxed whitespace-pre-wrap font-medium">
+              {text}
+            </p>
+          )}
         </div>
         <span className="mt-1.5 text-[10px] font-medium text-white/40 mr-1">
           You • {formatTime(timestamp)}
